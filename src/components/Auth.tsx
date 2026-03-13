@@ -211,7 +211,7 @@ export function Auth() {
               <div className="bg-white/10 p-2 rounded-2xl backdrop-blur-md border border-white/20">
                 <Calendar className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-black text-white tracking-tight">Nura Agenda</span>
+              <span className="text-xl font-black text-white tracking-tight">Agenda Nura</span>
             </div>
             
             <h2 className="text-3xl lg:text-4xl font-bold text-white leading-[1.1] mb-4 tracking-tight">
