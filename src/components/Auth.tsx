@@ -77,7 +77,7 @@ export function Auth() {
               </h1>
               <p className="text-slate-500 text-base font-medium">
                 {isLogin 
-                  ? 'Bem-vindo ao Nura Agenda.' 
+                  ? 'Bem-vindo ao Agenda Nura.' 
                   : 'Gerencie seus atendimentos, clientes e horários em um único lugar.'}
               </p>
             </div>
