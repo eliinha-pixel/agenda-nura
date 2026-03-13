@@ -9,8 +9,9 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'hoje' | 'amanha' | 'semana' | 'mes'>('hoje');
+  const [filter, setFilter] = useState<'proximos' | 'hoje' | 'amanha' | 'semana' | 'mes'>('proximos');
   const [userName, setUserName] = useState('Admin');
+  const [futureCount, setFutureCount] = useState(0);
   
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -46,7 +47,23 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
   useEffect(() => {
     fetchAppointments();
     fetchClients();
+    fetchFutureCount();
   }, [filter]);
+
+  const fetchFutureCount = async () => {
+    try {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const { count, error } = await supabase
+        .from('appointments')
+        .select('*', { count: 'exact', head: true })
+        .gte('date', today)
+        .neq('status', 'Cancelado');
+      
+      if (!error) setFutureCount(count || 0);
+    } catch (error) {
+      console.error('Error fetching future count:', error);
+    }
+  };
 
   const fetchClients = async () => {
     try {
@@ -63,9 +80,12 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
     try {
       const today = new Date();
       let startDate = format(today, 'yyyy-MM-dd');
-      let endDate = format(today, 'yyyy-MM-dd');
+      let endDate: string | null = format(today, 'yyyy-MM-dd');
 
-      if (filter === 'amanha') {
+      if (filter === 'proximos') {
+        startDate = format(today, 'yyyy-MM-dd');
+        endDate = null;
+      } else if (filter === 'amanha') {
         const tomorrow = addDays(today, 1);
         startDate = format(tomorrow, 'yyyy-MM-dd');
         endDate = format(tomorrow, 'yyyy-MM-dd');
@@ -77,11 +97,16 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
         endDate = format(endOfMonth(today), 'yyyy-MM-dd');
       }
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('appointments')
         .select('*')
-        .gte('date', startDate)
-        .lte('date', endDate)
+        .gte('date', startDate);
+
+      if (endDate) {
+        query = query.lte('date', endDate);
+      }
+
+      const { data, error } = await query
         .order('date', { ascending: true })
         .order('time', { ascending: true });
 
@@ -160,6 +185,12 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
     setFormError('');
 
     try {
+      // Validate if client exists
+      const clientExists = clients.find(c => c.name.toLowerCase() === formData.client_name.toLowerCase());
+      if (!clientExists) {
+        throw new Error('Para criar um agendamento, você precisa primeiro cadastrar o cliente.');
+      }
+
       const { data: conflicts } = await supabase
         .from('appointments')
         .select('id')
@@ -213,6 +244,7 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
   };
 
   const getFilterText = () => {
+    if (filter === 'proximos') return 'futuros';
     if (filter === 'hoje') return 'para hoje';
     if (filter === 'amanha') return 'para amanhã';
     if (filter === 'semana') return 'para esta semana';
@@ -222,6 +254,21 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
   const activeCount = appointments.filter(a => a.status !== 'Cancelado').length;
 
   const handleShare = (app: Appointment) => {
+    const client = clients.find(c => c.name.toLowerCase() === app.client_name.toLowerCase());
+    
+    if (!client || !client.phone) {
+      alert('Não é possível enviar o link: cliente sem WhatsApp cadastrado.');
+      return;
+    }
+
+    // Clean phone number (remove non-digits)
+    const cleanPhone = client.phone.replace(/\D/g, '');
+    
+    if (!cleanPhone) {
+      alert('Não é possível enviar o link: cliente sem WhatsApp cadastrado.');
+      return;
+    }
+
     const dateObj = parseISO(app.date);
     const formattedDate = format(dateObj, "dd/MM/yyyy");
     const time = app.time.substring(0, 5);
@@ -229,7 +276,7 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
     
     const text = `Olá ${app.client_name}! Seu agendamento para *${app.service}* está marcado para o dia *${formattedDate}* às *${time}*.\n\nPor favor, confirme ou cancele seu horário acessando o link abaixo:\n${url}`;
     
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const renderAppointmentCard = (app: Appointment) => {
@@ -325,7 +372,7 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
       return <div className="text-center py-8 text-slate-500">Nenhum agendamento encontrado.</div>;
     }
 
-    if (filter === 'semana' || filter === 'mes') {
+    if (filter === 'semana' || filter === 'mes' || filter === 'proximos') {
       const grouped = filteredAppointments.reduce((acc, app) => {
         if (!acc[app.date]) acc[app.date] = [];
         acc[app.date].push(app);
@@ -372,6 +419,20 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
         {/* Left Column - List */}
         <div className="xl:col-span-2 space-y-8">
           <div className="flex flex-wrap items-center gap-2">
+            <div className="group relative">
+              <button 
+                onClick={() => setFilter('proximos')}
+                className={`px-5 py-2 text-sm font-bold rounded-full transition-all cursor-pointer flex items-center space-x-2 ${filter === 'proximos' ? 'bg-brand-primary text-white shadow-md shadow-violet-100' : 'text-slate-500 hover:bg-violet-50 hover:text-violet-600'}`}
+              >
+                <span>Próximos</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] ${filter === 'proximos' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                  {futureCount}
+                </span>
+              </button>
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-slate-800 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
+                Todos os agendamentos futuros, em ordem de data.
+              </div>
+            </div>
             <button 
               onClick={() => setFilter('hoje')}
               className={`px-5 py-2 text-sm font-bold rounded-full transition-all cursor-pointer ${filter === 'hoje' ? 'bg-brand-primary text-white shadow-md shadow-violet-100' : 'text-slate-500 hover:bg-violet-50 hover:text-violet-600'}`}
@@ -434,8 +495,9 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
                   onFocus={() => setShowClientDropdown(true)}
                   onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
                   className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all text-sm text-slate-800"
-                  placeholder="Ex: João Silva"
+                  placeholder="Selecione um cliente cadastrado..."
                 />
+                <p className="text-[10px] text-slate-400 mt-1 ml-1 italic">O cliente deve estar previamente cadastrado.</p>
                 
                 {/* Custom Client Autocomplete Dropdown */}
                 {showClientDropdown && clients.filter(c => c.name.toLowerCase().includes(formData.client_name.toLowerCase())).length > 0 && (
@@ -525,7 +587,7 @@ export function Dashboard({ searchTerm = '' }: { searchTerm?: string }) {
             <div className="mt-6 bg-violet-50 rounded-xl p-4 flex items-start space-x-3 border border-violet-100">
               <Info className="w-5 h-5 text-violet-600 flex-shrink-0 mt-0.5" />
               <p className="text-xs text-violet-600 leading-relaxed">
-                <strong className="text-violet-700">Dica:</strong> Você pode selecionar clientes já cadastrados digitando o nome no campo acima.
+                <strong className="text-violet-700">Atenção:</strong> Para agendar, o cliente deve estar cadastrado na aba <span className="font-bold">Clientes</span>. Digite o nome para selecionar.
               </p>
             </div>
           </div>
