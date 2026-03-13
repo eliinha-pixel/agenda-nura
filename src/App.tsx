@@ -22,15 +22,27 @@ export default function App() {
   const isConfirmRoute = window.location.pathname.startsWith('/confirmar/');
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error && error.message.includes('Refresh Token Not Found')) {
+        supabase.auth.signOut();
+        setSession(null);
+      } else {
+        setSession(session);
+      }
       setLoading(false);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        setSession(session);
+      }
+      
+      // Handle session refresh errors
+      if (event === 'INITIAL_SESSION' && !session) {
+        // Check if there was an error during initial session fetch
+      }
     });
 
     return () => subscription.unsubscribe();
