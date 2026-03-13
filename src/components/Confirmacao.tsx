@@ -12,7 +12,14 @@ export function Confirmacao() {
   const [actionStatus, setActionStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [actionMessage, setActionMessage] = useState('');
 
-  const appointmentId = window.location.pathname.split('/').pop();
+  const getAppointmentId = () => {
+    const parts = window.location.pathname.split('/');
+    // Filter out empty strings and return the last part
+    const filtered = parts.filter(p => p !== '');
+    return filtered[filtered.length - 1];
+  };
+
+  const appointmentId = getAppointmentId();
 
   useEffect(() => {
     if (appointmentId) {
@@ -25,16 +32,27 @@ export function Confirmacao() {
 
   const fetchAppointment = async () => {
     try {
+      console.log('Fetching appointment with ID:', appointmentId);
       const { data, error } = await supabase
         .from('appointments')
         .select('*')
         .eq('id', appointmentId)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error fetching appointment:', error);
+        throw error;
+      }
+      
+      if (!data) {
+        console.error('No data returned for appointment ID:', appointmentId);
+        throw new Error('Agendamento não encontrado');
+      }
+
       setAppointment(data);
     } catch (err: any) {
-      setError('Agendamento não encontrado ou link expirado.');
+      console.error('Error in fetchAppointment:', err);
+      setError('Agendamento não encontrado ou link expirado. Verifique se o link está correto.');
     } finally {
       setLoading(false);
     }

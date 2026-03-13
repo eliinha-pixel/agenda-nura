@@ -16,15 +16,12 @@ import { Session } from '@supabase/supabase-js';
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchTerm, setSearchTerm] = useState('');
-  const [isConfirmRoute, setIsConfirmRoute] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (window.location.pathname.startsWith('/confirmar/')) {
-      setIsConfirmRoute(true);
-    }
+  const isConfirmRoute = window.location.pathname.startsWith('/confirmar/');
 
+  useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
